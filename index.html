@@ -16,7 +16,6 @@
                 <ul id="chatTextUL">
                     <li>Player 1: Hello man</li>
                     <li>Player 2: Hey, what's up?</li>
-    
                     <li>Player 1: Lorem Ipsum</li>
                     <li>Player 2: Lorem Ipsum</li>
                     <li>Player 1: Lorem Ipsum</li>
@@ -56,17 +55,29 @@
             <input type="range" min="0" max="100" value="10" class="slider" id="scaleY"> 
             <span>Z: </span>
             <input type="range" min="0" max="100" value="10" class="slider" id="scaleZ">
+
+            <br>
+            <span>Camera Rotation X: </span>
+            <input type="range" min="0" max="360" value="0" class="slider" id="camRotationX"> 
+            <span>Y: </span>
+            <input type="range" min="0" max="360" value="0" class="slider" id="camRotationY"> 
+            <span>Z: </span>
+            <input type="range" min="0" max="360" value="0" class="slider" id="camRotationZ"> 
+            <br>
         </div>
-        <img src="logo.svg" height ="100" width = "100" style="position: absolute">
-        <img src="logo.svg" height ="50" width = "50" style="position: absolute; margin-left: 50px">
+        
+        <!-- <img src="logo.svg" height ="100" width = "100" style="position: absolute">
+        <img src="logo.svg" height ="50" width = "50" style="position: absolute; margin-left: 50px"> -->
         
         <!-- <iframe width="560" height="315" src="https://www.youtube.com/embed/NAIQyoPcjNM" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe> 
         <input type="button" id="start" value="Start" ></input> -->
     </div>
+
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="clientSocket.js"></script>
     <script src="https://webglfundamentals.org/webgl/resources/webgl-utils.js"></script>
     <script src="renderer.js"></script>
     <script src="chatWindow.js"></script>
-
 </body>
-
-
