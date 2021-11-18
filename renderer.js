@@ -329,8 +329,7 @@ function initializeWebGL(canvasID){
 
 
     transformMatrix = mat4.perspective(90, aspectRatio, zNear, zFar)
-    cameraMatrix = mat4.rotateY(degToRad(0))
-    cameraMatrix = mat4.translate(cameraMatrix, 0, 0, radius * 1.5)
+
 
     calculateTransformationMatrix3D()
     gl.enable(gl.DEPTH_TEST);
@@ -346,14 +345,17 @@ function draw(){
     aspectRatio = gl.canvas.clientWidth / gl.canvas.clientHeight
   //
 
+  cameraMatrix = mat4.rotateY(degToRad(1.5))
+  cameraMatrix = mat4.translate(cameraMatrix, 0, 0, radius * 1.5)
+
   var viewMatrix = mat4.inverse(cameraMatrix)
   var viewProjectionMatrix = mat4.multiply(transformMatrix, viewMatrix)
   for(var i = 0; i < numF; i++){
     var angle = i * Math.PI * 2/numF
     var x = Math.cos(angle) * radius
-    var y = Math.sin(angle) * radius
+    var z = Math.sin(angle) * radius
 
-    var matrix = mat4.translate(viewProjectionMatrix, x, 0, y)
+    var matrix = mat4.translate(viewProjectionMatrix, x, 0, z)
 
     setUniformMat4f(program, "u_matrix", matrix)
     gl.drawArrays(gl.TRIANGLES, 0, 16*6)
@@ -384,6 +386,7 @@ function bindBufferUint8(program, data, attributeName, drawMode){
     gl.vertexAttribPointer(positionAttributeLocation, 3, gl.UNSIGNED_BYTE, true, 0, 0)
     gl.enableVertexAttribArray(positionAttributeLocation)
 }
+
 function createProgram(gl, vertexShader, fragmentShader){
     var program = gl.createProgram()
     gl.attachShader(program, vertexShader)
@@ -399,6 +402,7 @@ function createProgram(gl, vertexShader, fragmentShader){
 
     gl.deleteProgram(program)
 }
+
 function initializeShader(gl, shaderType, shaderSource){
     var shader = gl.createShader(shaderType);
     gl.shaderSource(shader, shaderSource)
@@ -411,26 +415,32 @@ function initializeShader(gl, shaderType, shaderSource){
     console.log("Shader initialization error!" + gl.getShaderInfoLog(shader))
     gl.deleteShader(shader);
 }
+
 function setUniform4f(program, uniformName, x, y, z, w){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniform4f(attributeLocation, x, y, z, w)
 }
+
 function setUniform3f(program, uniformName, x, y, z){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniform3f(attributeLocation, x, y, z)
 }
+
 function setUniform2f(program, uniformName, x, y){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniform2f(attributeLocation, x, y)
 }
+
 function setUniformf(program, uniformName, x){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniform1f(attributeLocation, x)
 }
+
 function setUniformMat3f(program, uniformName, mat3){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniformMatrix3fv(attributeLocation, false, mat3)
 }
+
 function setUniformMat4f(program, uniformName, mat4){
     var attributeLocation = gl.getUniformLocation(program, uniformName)
     gl.uniformMatrix4fv(attributeLocation, false, mat4)
