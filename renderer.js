@@ -1,14 +1,21 @@
 var vertexShaderSource = `
     attribute vec4 a_position;
-    uniform mat4 u_matrix;
+    attribute vec3 a_normal;
 
+    uniform mat4 u_matrix;
     attribute vec4 in_color;
     varying vec4 out_color;
 
+    varying vec3 v_normal;
+
+    uniform mat4 u_worldInverseTranspose;
+    uniform mat4 u_worldViewProjection;
+
     void main(){
-        gl_Position = u_matrix * a_position;
+        gl_Position = u_worldViewProjection * a_position;
 
         out_color = in_color;
+        v_normal = mat3(u_worldInverseTranspose) * a_normal;
     }
 `
 
@@ -18,9 +25,14 @@ var fragmentShaderSource = `
     uniform vec4 u_color;
 
     varying vec4 out_color;
+    varying vec3 v_normal;
+    uniform vec3 u_reverseLightDirection;
     
     void main(){
-        gl_FragColor = out_color;
+      vec3 normal = normalize(v_normal);
+      float light = dot(normal, u_reverseLightDirection);
+      gl_FragColor = u_color;
+      gl_FragColor.rgb *= light;
     }
 
 `
@@ -28,7 +40,7 @@ var fragmentShaderSource = `
 var canvas
 var gl
 
-var transformMatrix
+var projectionMatrix
 var viewProjectionMatrix
 var aspectRatio
 var zNear = 1;
@@ -41,135 +53,9 @@ var program
 
 var socket = io();
 
-var positions = [
-    // left column front
-    0,   0,  0,
-    0, 150,  0,
-    30,   0,  0,
-    0, 150,  0,
-    30, 150,  0,
-    30,   0,  0,
-
-    // top rung front
-    30,   0,  0,
-    30,  30,  0,
-    100,   0,  0,
-    30,  30,  0,
-    100,  30,  0,
-    100,   0,  0,
-
-    // middle rung front
-    30,  60,  0,
-    30,  90,  0,
-    67,  60,  0,
-    30,  90,  0,
-    67,  90,  0,
-    67,  60,  0,
-
-    // left column back
-    0,   0,  30,
-    30,   0,  30,
-    0, 150,  30,
-    0, 150,  30,
-    30,   0,  30,
-    30, 150,  30,
-
-    // top rung back
-    30,   0,  30,
-    100,   0,  30,
-    30,  30,  30,
-    30,  30,  30,
-    100,   0,  30,
-    100,  30,  30,
-
-    // middle rung back
-    30,  60,  30,
-    67,  60,  30,
-    30,  90,  30,
-    30,  90,  30,
-    67,  60,  30,
-    67,  90,  30,
-
-    // top
-    0,   0,   0,
-    100,   0,   0,
-    100,   0,  30,
-    0,   0,   0,
-    100,   0,  30,
-    0,   0,  30,
-
-    // top rung right
-    100,   0,   0,
-    100,  30,   0,
-    100,  30,  30,
-    100,   0,   0,
-    100,  30,  30,
-    100,   0,  30,
-
-    // under top rung
-    30,   30,   0,
-    30,   30,  30,
-    100,  30,  30,
-    30,   30,   0,
-    100,  30,  30,
-    100,  30,   0,
-
-    // between top rung and middle
-    30,   30,   0,
-    30,   60,  30,
-    30,   30,  30,
-    30,   30,   0,
-    30,   60,   0,
-    30,   60,  30,
-
-    // top of middle rung
-    30,   60,   0,
-    67,   60,  30,
-    30,   60,  30,
-    30,   60,   0,
-    67,   60,   0,
-    67,   60,  30,
-
-    // right of middle rung
-    67,   60,   0,
-    67,   90,  30,
-    67,   60,  30,
-    67,   60,   0,
-    67,   90,   0,
-    67,   90,  30,
-
-    // bottom of middle rung.
-    30,   90,   0,
-    30,   90,  30,
-    67,   90,  30,
-    30,   90,   0,
-    67,   90,  30,
-    67,   90,   0,
-
-    // right of bottom
-    30,   90,   0,
-    30,  150,  30,
-    30,   90,  30,
-    30,   90,   0,
-    30,  150,   0,
-    30,  150,  30,
-
-    // bottom
-    0,   150,   0,
-    0,   150,  30,
-    30,  150,  30,
-    0,   150,   0,
-    30,  150,  30,
-    30,  150,   0,
-
-    // left side
-    0,   0,   0,
-    0,   0,  30,
-    0, 150,  30,
-    0,   0,   0,
-    0, 150,  30,
-    0, 150,   0
-]
+var positions = new Float32Array([
+  -50,75,15,-50,-75,15,-20,75,15,-50,-75,15,-20,-75,15,-20,75,15,-20,75,15,-20,45,15,50,75,15,-20,45,15,50,45,15,50,75,15,-20,15,15,-20,-15,15,17,15,15,-20,-15,15,17,-15,15,17,15,15,-50,75,-15,-20,75,-15,-50,-75,-15,-50,-75,-15,-20,75,-15,-20,-75,-15,-20,75,-15,50,75,-15,-20,45,-15,-20,45,-15,50,75,-15,50,45,-15,-20,15,-15,17,15,-15,-20,-15,-15,-20,-15,-15,17,15,-15,17,-15,-15,-50,75,15,50,75,15,50,75,-15,-50,75,15,50,75,-15,-50,75,-15,50,75,15,50,45,15,50,45,-15,50,75,15,50,45,-15,50,75,-15,-20,45,15,-20,45,-15,50,45,-15,-20,45,15,50,45,-15,50,45,15,-20,45,15,-20,15,-15,-20,45,-15,-20,45,15,-20,15,15,-20,15,-15,-20,15,15,17,15,-15,-20,15,-15,-20,15,15,17,15,15,17,15,-15,17,15,15,17,-15,-15,17,15,-15,17,15,15,17,-15,15,17,-15,-15,-20,-15,15,-20,-15,-15,17,-15,-15,-20,-15,15,17,-15,-15,17,-15,15,-20,-15,15,-20,-75,-15,-20,-15,-15,-20,-15,15,-20,-75,15,-20,-75,-15,-50,-75,15,-50,-75,-15,-20,-75,-15,-50,-75,15,-20,-75,-15,-20,-75,15,-50,75,15,-50,75,-15,-50,-75,-15,-50,75,15,-50,-75,-15,-50,-75,15
+])
 
 var colorData = [
     // left column front
@@ -300,6 +186,135 @@ var colorData = [
   160, 160, 220,
   160, 160, 220
 ]
+var normals = new Float32Array([
+  // left column front
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+
+  // top rung front
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+
+  // middle rung front
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+  0, 0, 1,
+
+  // left column back
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+
+  // top rung back
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+
+  // middle rung back
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+  0, 0, -1,
+
+  // top
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+
+  // top rung right
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+
+  // under top rung
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+
+  // between top rung and middle
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+
+  // top of middle rung
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+
+  // right of middle rung
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+
+  // bottom of middle rung.
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+
+  // right of bottom
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+  1, 0, 0,
+
+  // bottom
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+  0, -1, 0,
+
+  // left side
+  -1, 0, 0,
+  -1, 0, 0,
+  -1, 0, 0,
+  -1, 0, 0,
+  -1, 0, 0,
+  -1, 0, 0
+]);
 var mat3 = {
   translation: function(tX, tY){
       return [
@@ -367,16 +382,16 @@ var mat3 = {
       ]
   },
 
-  translate: function(transformMatrix, x, y){
-      return mat3.multiply(transformMatrix, mat3.translation(x,y))
+  translate: function(projectionMatrix, x, y){
+      return mat3.multiply(projectionMatrix, mat3.translation(x,y))
   },
 
-  rotate: function(transformMatrix, angleInRadians){
-      return mat3.multiply(transformMatrix, mat3.rotation(angleInRadians))
+  rotate: function(projectionMatrix, angleInRadians){
+      return mat3.multiply(projectionMatrix, mat3.rotation(angleInRadians))
   },
 
-  scale: function(transformMatrix, x, y){
-      return mat3.multiply(transformMatrix, mat3.scaling(x,y))
+  scale: function(projectionMatrix, x, y){
+      return mat3.multiply(projectionMatrix, mat3.scaling(x,y))
   }
 
 }
@@ -388,6 +403,20 @@ var mat4 = {
        0,  0,  1,  0,
        tx, ty, tz, 1,
     ];
+  },
+
+  transformPoint: function (m, v, dst) {
+    dst = dst || new MatType(3);
+    var v0 = v[0];
+    var v1 = v[1];
+    var v2 = v[2];
+    var d = v0 * m[0 * 4 + 3] + v1 * m[1 * 4 + 3] + v2 * m[2 * 4 + 3] + m[3 * 4 + 3];
+
+    dst[0] = (v0 * m[0 * 4 + 0] + v1 * m[1 * 4 + 0] + v2 * m[2 * 4 + 0] + m[3 * 4 + 0]) / d;
+    dst[1] = (v0 * m[0 * 4 + 1] + v1 * m[1 * 4 + 1] + v2 * m[2 * 4 + 1] + m[3 * 4 + 1]) / d;
+    dst[2] = (v0 * m[0 * 4 + 2] + v1 * m[1 * 4 + 2] + v2 * m[2 * 4 + 2] + m[3 * 4 + 2]) / d;
+
+    return dst;
   },
  
   rotationX: function(angleInRadians) {
@@ -613,8 +642,48 @@ var mat4 = {
       d * ((tmp_22 * m22 + tmp_16 * m02 + tmp_21 * m12) -
             (tmp_20 * m12 + tmp_23 * m22 + tmp_17 * m02))
     ];
+  },
+
+  cross: function(a, b) {
+    return [a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0]];
+  },
+
+  subtractVectors: function(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  },
+
+  normalize: function(v) {
+    var length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    // make sure we don't divide by 0.
+    if (length > 0.00001) {
+      return [v[0] / length, v[1] / length, v[2] / length];
+    } else {
+      return [0, 0, 0];
+    }
+  },
+
+  lookAt: function(cameraPosition, target, up) {
+    var zAxis = this.normalize(
+        this.subtractVectors(cameraPosition, target));
+    var xAxis = this.normalize(this.cross(up, zAxis));
+    var yAxis = this.normalize(this.cross(zAxis, xAxis));
+ 
+    return [
+       xAxis[0], xAxis[1], xAxis[2], 0,
+       yAxis[0], yAxis[1], yAxis[2], 0,
+       zAxis[0], zAxis[1], zAxis[2], 0,
+       cameraPosition[0],
+       cameraPosition[1],
+       cameraPosition[2],
+       1,
+    ];
   }
+  
+
 };
+
 var camera = {
   x : 0,
   y : 0,
@@ -626,7 +695,34 @@ var camera = {
       cameraMatrix = mat4.rotateZ(cameraMatrix, z)
       cameraMatrix = mat4.translate(cameraMatrix, 0, 0, radius * 1.5)
     var viewMatrix = mat4.inverse(cameraMatrix)
-    return mat4.multiply(transformMatrix, viewMatrix)
+    return mat4.multiply(projectionMatrix, viewMatrix)
+  },
+
+  rotateAround: function(x,y,z){
+    // Compute the position of the first F
+    var fPosition = [radius, 0, 0];
+  
+    // Use matrix math to compute a position on a circle where
+    // the camera is
+    var cameraMatrix = mat4.rotationX(x)
+    cameraMatrix = mat4.rotateY(cameraMatrix, y)
+    cameraMatrix = mat4.rotateZ(cameraMatrix, z)
+    cameraMatrix = mat4.translate(cameraMatrix, 0, 0, radius * 1.5)
+    // Get the camera's position from the matrix we computed
+    var cameraPosition = [
+      cameraMatrix[12],
+      cameraMatrix[13],
+      cameraMatrix[14],
+    ];
+  
+    var up = [0, 1, 0];
+  
+    // Compute the camera's matrix using look at.
+    var cameraMatrix = mat4.lookAt(cameraPosition, fPosition, up);
+  
+    // Make a view matrix from the camera matrix.
+    var viewMatrix = mat4.inverse(cameraMatrix);
+    return mat4.multiply(projectionMatrix, viewMatrix)
   },
 
   createCamera : function(x,y,z){
@@ -636,7 +732,7 @@ var camera = {
   }
 }
 
-
+var worldMatrix
 
 function initializeWebGL(canvasID){
     canvas = document.getElementById(canvasID)
@@ -656,31 +752,54 @@ function initializeWebGL(canvasID){
     createPositionBuffer(program, positions, "a_position")
     bindBufferUint8(program, colorData, "in_color", gl.STATIC_DRAW)
 
-    setUniform4f(program, "u_color",1,0,.25,1)
-    
     setUniform2f(program, "u_resolution", gl.canvas.width, gl.canvas.height)
+
+            var normalBuffer = gl.createBuffer()
+            var normalLocation = gl.getAttribLocation(program, "a_normal")
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer)
+            gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+
+            
+            gl.enableVertexAttribArray(normalLocation)
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            // Tell the attribute how to get data out of normalBuffer (ARRAY_BUFFER)
+            var size = 3;          // 3 components per iteration
+            var type = gl.FLOAT;   // the data is 32bit floating point values
+            var normalize = false; // normalize the data (convert from 0-255 to 0-1)
+            var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+            var offset = 0;        // start at the beginning of the buffer
+            gl.vertexAttribPointer(
+                normalLocation, size, type, normalize, stride, offset)
+                
+    worldMatrix = mat4.rotationY(0);
+
     createUIEventListeners()
 
-    // transformMatrix = mat4.matrixZToW(1)
-    // transformMatrix = mat4.multiply(transformMatrix, mat4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 1600))
-
-    //transformMatrix = mat4.projection(gl.canvas.clientWidth, gl.canvas.clientHeight, 1600)
 
     aspectRatio = gl.canvas.clientWidth / gl.canvas.clientHeight
 
-    transformMatrix = mat4.perspective(degToRad(90), aspectRatio, zNear, zFar)
-    console.log("TRANFORM IS " + transformMatrix)
-    viewProjectionMatrix = camera.rotate(0,0,0)
+    projectionMatrix = mat4.perspective(degToRad(60), aspectRatio, zNear, zFar)
+    var camera = [100, 150, 200];
+    var target = [0, 35, 0];
+    var up = [0, 1, 0];
+    var cameraMatrix = mat4.lookAt(camera, target, up);
+
+    var viewMatrix = mat4.inverse(cameraMatrix)
+
+    //viewProjectionMatrix = camera.rotate(0,0,0)
+    viewProjectionMatrix = mat4.multiply(projectionMatrix, viewMatrix)
+
+    setUniform4f(program, "u_color", 0.2, 1, 0.2, 1)
 
     calculateTransformationMatrix3D()
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
+  console.log(projectionMatrix)
     draw()
     setTransformations()
 }
 
 function draw(){
-
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
   gl.clearColor(0,0,0,0)
   //Maybe check if canvas has changed size
@@ -689,18 +808,41 @@ function draw(){
     aspectRatio = gl.canvas.clientWidth / gl.canvas.clientHeight
   //
 
+    var lightDir = mat4.normalize([0.5,0.7,1])
+    setUniform3f(program, "u_reverseLightDirection", lightDir[0], lightDir[1], lightDir[2])
+
+    var worldViewProjectionMatrix = mat4.multiply(viewProjectionMatrix, worldMatrix)
+
+    var worldInverseMatrix = mat4.inverse(worldMatrix)
+    setUniformMat4f(program, "u_worldInverseTranspose", worldMatrix)
+    setUniformMat4f(program, "u_worldViewProjection", worldViewProjectionMatrix)
 
 
-  for(var i = 0; i < numF; ++i){
-    var angle = i * Math.PI * 2/numF
-    var x = Math.cos(angle) * radius
-    var z = Math.sin(angle) * radius
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 16 * 6;
+    gl.drawArrays(primitiveType, offset, count);
 
-    var matrix = mat4.translate(viewProjectionMatrix, x, 0, z)
+    //gl.drawArrays(gl.TRIANGLES, 0, 16*6)
+  // for(var i = 0; i < 1; i++){
+  //   var angle = i * Math.PI * 2/numF
+  //   var x = Math.cos(angle) * radius
+  //   var z = Math.sin(angle) * radius
 
-    setUniformMat4f(program, "u_matrix", matrix)
-    gl.drawArrays(gl.TRIANGLES, 0, 16*6)
-  }
+  //   var matrix = mat4.translate(viewProjectionMatrix, x, 0, z)
+
+  //   var worldMatrix = mat4.rotationY(0);
+  //   var worldViewProjectionMatrix = mat4.multiply(viewProjectionMatrix, worldMatrix)
+  //   //worldViewProjectionMatrix = mat4.multiply(worldViewProjectionMatrix, matrix)
+
+  //   var worldInverseMatrix = mat4.inverse(worldMatrix)
+  //   setUniformMat4f(program, "u_worldInverseTranspose", worldInverseMatrix)
+
+  //   setUniformMat4f(program, "u_worldViewProjection", worldViewProjectionMatrix)
+  //   console.log(worldViewProjectionMatrix)
+  //   //setUniformMat4f(program, "u_matrix", matrix)
+  //   gl.drawArrays(gl.TRIANGLES, 0, 16*6)
+  // }
 }
 
 //Used exclusively for position buffer rn but could posssibly be made generic to work for any Float32 buffer
@@ -708,9 +850,10 @@ function createPositionBuffer(program, positions, attributeName){
     var positionBuffer = gl.createBuffer()
     var positionAttributeLocation = gl.getAttribLocation(program, attributeName)
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW)
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
     gl.vertexAttribPointer(positionAttributeLocation, 3, gl.FLOAT, false, 0, 0)
+    console.log(positionAttributeLocation)
     gl.enableVertexAttribArray(positionAttributeLocation)
 }
 
@@ -790,20 +933,19 @@ function degToRad(value){
 
 
 function calculateTransformationMatrix2D(){
-    transformMatrix = mat3.translate(transformMatrix, 0, 0)
-    transformMatrix = mat3.rotate(transformMatrix, 0)
-    transformMatrix = mat3.scale(transformMatrix, 1, 1)
-    setUniformMat3f(program, "u_matrix", transformMatrix)
+    projectionMatrix = mat3.translate(projectionMatrix, 0, 0)
+    projectionMatrix = mat3.rotate(projectionMatrix, 0)
+    projectionMatrix = mat3.scale(projectionMatrix, 1, 1)
+    setUniformMat3f(program, "u_matrix", projectionMatrix)
 }
 
 //Make it so we only ever have to call this one function (Make it more generic). Could possibly create a class for all of the data we want to put in here
 function calculateTransformationMatrix3D(){
-    transformMatrix = mat4.translate(transformMatrix, 0, 0, 0)
-    transformMatrix = mat4.rotateX(transformMatrix, 0)
-    transformMatrix = mat4.rotateY(transformMatrix, 0)
-    transformMatrix = mat4.rotateZ(transformMatrix, 0)
-    transformMatrix = mat4.scale(transformMatrix, 1, 1, 1)
-    setUniformMat4f(program, "u_matrix", transformMatrix)
+    projectionMatrix = mat4.translate(projectionMatrix, 0, 0, 0)
+    projectionMatrix = mat4.rotateX(projectionMatrix, 0)
+    projectionMatrix = mat4.rotateY(projectionMatrix, 0)
+    projectionMatrix = mat4.rotateZ(projectionMatrix, 0)
+    projectionMatrix = mat4.scale(projectionMatrix, 1, 1, 1)
 }
 
 function createUIEventListeners(){
@@ -844,26 +986,23 @@ function setTransformations(){
 }
 
 function updateTransformations(transformations){
-      
-  transformMatrix = mat4.perspective(90, aspectRatio, zNear, zFar)
-  transformMatrix = mat4.translate(transformMatrix, transformations["positionX"],transformations["positionY"], transformations["positionZ"])
+  projectionMatrix = mat4.perspective(90, aspectRatio, zNear, zFar)
+  worldMatrix = mat4.rotationX(0)
+  projectionMatrix = mat4.translate(projectionMatrix, transformations["positionX"],transformations["positionY"], transformations["positionZ"])
   
-  transformMatrix = mat4.rotateX(transformMatrix, transformations["rotationX"] * (Math.PI / 180))
-  transformMatrix = mat4.rotateY(transformMatrix, transformations["rotationY"] * (Math.PI / 180))
-  transformMatrix = mat4.rotateZ(transformMatrix, transformations["rotationZ"] * (Math.PI / 180))
+  worldMatrix = mat4.rotateX(worldMatrix, transformations["rotationX"] * (Math.PI / 180))
+  worldMatrix = mat4.rotateY(worldMatrix, transformations["rotationY"] * (Math.PI / 180))
+  worldMatrix = mat4.rotateZ(worldMatrix, transformations["rotationZ"] * (Math.PI / 180))
 
-  transformMatrix = mat4.scale(transformMatrix, transformations["scaleX"]/10, transformations["scaleY"]/10, transformations["scaleZ"]/10)
-
+  projectionMatrix = mat4.scale(projectionMatrix, transformations["scaleX"]/10, transformations["scaleY"]/10, transformations["scaleZ"]/10)
   //VIEW PROJECTION MUST COME AFTER TRANSFORM MATRIX
   viewProjectionMatrix = camera.rotate( transformations["camRotationX"] * (Math.PI / 180), transformations["camRotationY"] * (Math.PI / 180), transformations["camRotationZ"] * (Math.PI / 180))
+  console.log(projectionMatrix)
 
-
-  setUniformMat4f(program, "u_matrix", transformMatrix)
   draw()
 }
 
 socket.on("receive-transformations", transformations =>{
-  console.log(transformations["scaleX"].value)
   updateTransformations(transformations)
 })
 
