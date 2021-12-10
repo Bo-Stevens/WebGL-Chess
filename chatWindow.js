@@ -5,15 +5,15 @@ var chatTextUL = document.getElementById("chatTextUL")
 
 function sendMessage(){
     if(chatWindow.value != ""){
-        socket.emit("send-message", chatWindow.value)
-        addMessageToUI(chatWindow.value)
+        socket.emit("send-message", "Player " + (playerNum + 1) + ": " + chatWindow.value)
+        addMessageToUI("Me : " + chatWindow.value)
     }
 
     chatText.scrollTo(0,chatText.scrollHeight)
 }
 
 function addMessageToUI(message){
-    var message = "Player 1: " + message
+    var message = message
     var li = document.createElement("li")
     li.innerHTML = message
     li.setAttribute("list-style-type", "none")
