@@ -1,7 +1,7 @@
 var chatWindow = document.getElementById("chatTextBox")
 var chatText = document.getElementById("chatText")
 var chatTextUL = document.getElementById("chatTextUL")
-var socket = io();
+//var socket = io();
 
 function sendMessage(){
     if(chatWindow.value != ""){
